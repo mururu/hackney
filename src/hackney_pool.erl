@@ -38,6 +38,9 @@ socket(PidOrName, {Transport, Host0, Port}) ->
 %% @doc release a socket in the pool
 release(PidOrName, {Transport, Host0, Port}, Socket) ->
     Host = string:to_lower(Host0),
+    Transport:setopts(Socket, [{active, once}]),
+    Pid = whereis(hackney_pool),
+    Transport:controlling_process(Socket, Pid),
     gen_server:call(PidOrName, {release, {Transport, Host, Port}, Socket}).
 
 %% @doc get total pool size
@@ -208,7 +211,6 @@ store_connection({Transport, _, _} = Key, Socket,
                  #state{timeout=Timeout, connections=Conns,
                         sockets=Sockets}=State) ->
     Timer = erlang:send_after(Timeout, self(), {timeout, Socket}),
-    Transport:setopts(Socket, [{active, once}]),
     ConnSockets = case dict:find(Key, Conns) of
         {ok, OldSockets} ->
             [Socket | OldSockets];
