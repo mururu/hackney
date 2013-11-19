@@ -95,25 +95,40 @@ perform(Client0, {Method0, Path, Headers0, Body0}) ->
                 HeadersLines,
                 <<"\r\n">>]),
 
-    %% send headers data
-    case hackney_request:send(Client, HeadersData) of
-        ok when Body =:= stream ->
+    if
+      is_binary(Body) ->
+        case stream_body(<<HeadersData/binary, Body/binary>>, Client) of
+          {error, _Reason}=E ->
+            E;
+          {ok, Client2} ->
+            case end_stream_body(Client2) of
+              {ok, Client3} ->
+                FinalClient = Client3#client{method=Method},
+                hackney_response:start_response(FinalClient);
+              Error ->
+                Error
+            end
+        end;
+      true ->
+        case hackney_request:send(Client, HeadersData) of
+          ok when Body =:= stream ->
             {ok, Client#client{response_state=stream, method=Method}};
-        ok ->
+          ok ->
             case stream_body(Body, Client) of
-                {error, _Reason}=E ->
-                    E;
-                {ok, Client2} ->
-                    case end_stream_body(Client2) of
-                        {ok, Client3} ->
-                            FinalClient = Client3#client{method=Method},
-                            hackney_response:start_response(FinalClient);
-                        Error ->
-                            Error
-                    end
+              {error, _Reason}=E ->
+                E;
+              {ok, Client2} ->
+                case end_stream_body(Client2) of
+                  {ok, Client3} ->
+                    FinalClient = Client3#client{method=Method},
+                    hackney_response:start_response(FinalClient);
+                  Error ->
+                    Error
+                end
             end;
-        Error ->
+          Error ->
             Error
+        end
     end.
 
 stream_body(eof, Client) ->
